@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeAlpha Social Network</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; background-color: #f4f6f8; color: #333; }
+        .container { max-width: 600px; margin: 0 auto; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        h2, h3 { margin-top: 0; color: #111; }
+        input, textarea, button { width: 100%; padding: 12px; margin: 8px 0; border-radius: 8px; border: 1px solid #ddd; box-sizing: border-box; font-size: 14px; }
+        textarea { resize: vertical; height: 80px; }
+        button { background-color: #ff69b4; color: white; border: none; cursor: pointer; font-weight: bold; transition: background 0.2s; }
+        button:hover { background-color: #ff1493; }
+        .hidden { display: none; }
+        .post-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-top: 15px; border-left: 4px solid #ff69b4; }
+        .post-meta { font-size: 12px; color: #777; margin-bottom: 5px; }
+        .post-author { font-weight: bold; color: #333; }
+        #message { font-weight: bold; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div id="loginSection" class="card">
+            <h2>Login to CodeAlpha Network</h2>
+            <input type="email" id="email" placeholder="Email Address" value="imane@test.com">
+            <input type="password" id="password" placeholder="Password" value="mypassword123">
+            <button onclick="loginUser()">Sign In</button>
+            <p id="message"></p>
+        </div>
+
+        <div id="dashboardSection" class="card hidden">
+            <h2>Welcome Back!</h2>
+            <textarea id="postContent" placeholder="What's on your mind today?"></textarea>
+            <button onclick="createNewPost()">Publish Post</button>
+            
+            <hr style="border: 0; border-top: 1px solid #eee; margin: 25px 0;">
+            
+            <h3>Recent Activity Feed</h3>
+            <div id="feedContainer">Loading posts...</div>
+        </div>
+    </div>
+
+    <script>
+        const BACKEND_URL = 'http://localhost:5000/api';
+        async function loginUser() {
+            const email = document.getElementById('email').value;
+            const password = document.getElementById('password').value;
+            const messageEl = document.getElementById('message');
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/auth/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    localStorage.setItem('token', data.token);
+                    showDashboard();
+                } else {
+                    messageEl.style.color = "red";
+                    messageEl.innerText = data.message || "Invalid credentials.";
+                }
+            } catch (error) {
+                messageEl.style.color = "red";
+                messageEl.innerText = "Cannot connect to backend server.";
+            }
+        }
+
+        function showDashboard() {
+            document.getElementById('loginSection').classList.add('hidden');
+            document.getElementById('dashboardSection').classList.remove('hidden');
+            loadFeed();
+        }
+
+        async function loadFeed() {
+            const feedContainer = document.getElementById('feedContainer');
+            try {
+                const response = await fetch(`${BACKEND_URL}/posts`);
+                const posts = await response.json();
+
+                if (posts.length === 0) {
+                    feedContainer.innerHTML = "<p style='color: #777;'>No posts available yet. Be the first!</p>";
+                    return;
+                }
+
+                feedContainer.innerHTML = posts.map(post => `
+                    <div class="post-card">
+                        <div class="post-meta">
+                            By <span class="post-author">@${post.username}</span> on ${new Date(post.created_at).toLocaleString()}
+                        </div>
+                        <div class="post-text">${post.content}</div>
+                    </div>
+                `).join('');
+
+            } catch (error) {
+                feedContainer.innerHTML = "<p style='color: red;'>Error loading feed items.</p>";
+            }
+        }
+        async function createNewPost() {
+            const content = document.getElementById('postContent').value;
+            const token = localStorage.getItem('token');
+
+            if (!content.trim()) return alert("Post content cannot be empty!");
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/posts`, {
+                    method: 'POST',
+                    headers: { 
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${token}`
+                    },
+                    body: JSON.stringify({ content })
+                });
+
+                if (response.ok) {
+                    document.getElementById('postContent').value = ''; 
+                    loadFeed(); 
+                } else {
+                    alert("Session expired or invalid token. Please log back in.");
+                }
+            } catch (error) {
+                alert("Error connecting to server.");
+            }
+        }
+        if (localStorage.getItem('token')) {
+            showDashboard();
+        }
+    </script>
+</body>
+</html>
