@@ -14,9 +14,27 @@
         button { background-color: #ff69b4; color: white; border: none; cursor: pointer; font-weight: bold; transition: background 0.2s; }
         button:hover { background-color: #ff1493; }
         .hidden { display: none; }
-        .post-card { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-top: 15px; border-left: 4px solid #ff69b4; }
-        .post-meta { font-size: 12px; color: #777; margin-bottom: 5px; }
+        
+        /* Posts Styles */
+        .post-card { background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); margin-top: 20px; border-left: 4px solid #ff69b4; }
+        .post-meta { font-size: 12px; color: #777; margin-bottom: 8px; }
         .post-author { font-weight: bold; color: #333; }
+        .post-text { font-size: 15px; margin-bottom: 15px; line-all: 1.5; }
+        
+        /* Actions Bar */
+        .post-actions { display: flex; gap: 15px; border-top: 1px solid #eee; padding-top: 10px; margin-bottom: 15px; }
+        .like-btn { background: #fff0f5; color: #ff1493; border: 1px solid #ffb6c1; width: auto; padding: 6px 15px; margin: 0; font-size: 13px; }
+        .like-btn:hover { background: #ffe4e1; }
+        
+        /* Comments Section */
+        .comments-section { background: #fdfdfd; border-top: 1px dashed #eee; padding-top: 10px; }
+        .comment-item { font-size: 13px; padding: 6px 0; border-bottom: 1px solid #f9f9f9; }
+        .comment-user { font-weight: bold; color: #555; }
+        .comment-input-box { display: flex; gap: 8px; margin-top: 10px; }
+        .comment-input { margin: 0; padding: 8px; font-size: 13px; flex-grow: 1; }
+        .comment-btn { width: auto; margin: 0; padding: 8px 15px; font-size: 13px; background-all: #333; }
+        .comment-btn:hover { background-color: #000; }
+        
         #message { font-weight: bold; text-align: center; }
     </style>
 </head>
@@ -45,6 +63,7 @@
 
     <script>
         const BACKEND_URL = 'http://localhost:5000/api';
+
         async function loginUser() {
             const email = document.getElementById('email').value;
             const password = document.getElementById('password').value;
@@ -85,49 +104,116 @@
                 const posts = await response.json();
 
                 if (posts.length === 0) {
-                    feedContainer.innerHTML = "<p style='color: #777;'>No posts available yet. Be the first!</p>";
+                    feedContainer.innerHTML = "<p style='color: #777;'>No posts available yet.</p>";
                     return;
                 }
 
-                feedContainer.innerHTML = posts.map(post => `
-                    <div class="post-card">
-                        <div class="post-meta">
-                            By <span class="post-author">@${post.username}</span> on ${new Date(post.created_at).toLocaleString()}
+                let feedHTML = '';
+
+                for (let post of posts) {
+                    const likeRes = await fetch(`${BACKEND_URL}/likes/${post.id}`);
+                    const likeData = await likeRes.json();
+                    const likesCount = likeData.likeCount || 0;
+
+                    const commentRes = await fetch(`${BACKEND_URL}/comments/${post.id}`);
+                    const comments = await commentRes.json();
+
+                    let commentsHTML = comments.map(c => `
+                        <div class="comment-item">
+                            <span class="comment-user">@${c.username}:</span> ${c.content}
                         </div>
-                        <div class="post-text">${post.content}</div>
-                    </div>
-                `).join('');
+                    `).join('');
+
+                    if(comments.length === 0) {
+                        commentsHTML = `<p id="no-comm-${post.id}" style="color:#aaa; font-size:12px; margin:5px 0;">No comments yet.</p>`;
+                    }
+
+                    feedHTML += `
+                        <div class="post-card">
+                            <div class="post-meta">
+                                By <span class="post-author">@${post.username}</span> on ${new Date(post.created_at).toLocaleString()}
+                            </div>
+                            <div class="post-text">${post.content}</div>
+                            
+                            <div class="post-actions">
+                                <button class="like-btn" onclick="toggleLike(${post.id})">❤️ Like (<span id="like-count-${post.id}">${likesCount}</span>)</button>
+                            </div>
+
+                            <div class="comments-section">
+                                <div id="comments-list-${post.id}">
+                                    ${commentsHTML}
+                                </div>
+                                <div class="comment-input-box">
+                                    <input type="text" id="comm-input-${post.id}" class="comment-input" placeholder="Write a comment...">
+                                    <button class="comment-btn" onclick="addComment(${post.id})">Reply</button>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+                }
+
+                feedContainer.innerHTML = feedHTML;
 
             } catch (error) {
-                feedContainer.innerHTML = "<p style='color: red;'>Error loading feed items.</p>";
+                feedContainer.innerHTML = "<p style='color: red;'>Error loading feed components.</p>";
             }
         }
+
         async function createNewPost() {
             const content = document.getElementById('postContent').value;
             const token = localStorage.getItem('token');
-
             if (!content.trim()) return alert("Post content cannot be empty!");
 
             try {
                 const response = await fetch(`${BACKEND_URL}/posts`, {
                     method: 'POST',
-                    headers: { 
-                        'Content-Type': 'application/json',
-                        'Authorization': `Bearer ${token}`
-                    },
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                     body: JSON.stringify({ content })
                 });
 
                 if (response.ok) {
-                    document.getElementById('postContent').value = ''; 
-                    loadFeed(); 
-                } else {
-                    alert("Session expired or invalid token. Please log back in.");
+                    document.getElementById('postContent').value = '';
+                    loadFeed();
                 }
-            } catch (error) {
-                alert("Error connecting to server.");
-            }
+            } catch (error) { alert("Error connecting to server."); }
         }
+
+        async function toggleLike(postId) {
+            const token = localStorage.getItem('token');
+            try {
+                const response = await fetch(`${BACKEND_URL}/likes/toggle`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ postId })
+                });
+                const data = await response.json();
+                
+                if (response.ok) {
+                    document.getElementById(`like-count-${postId}`).innerText = data.likeCount;
+                }
+            } catch (error) { console.error("Error toggling like", error); }
+        }
+        async function addComment(postId) {
+            const contentInput = document.getElementById(`comm-input-${postId}`);
+            const content = contentInput.value;
+            const token = localStorage.getItem('token');
+
+            if (!content.trim()) return;
+
+            try {
+                const response = await fetch(`${BACKEND_URL}/comments`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                    body: JSON.stringify({ postId, content })
+                });
+
+                if (response.ok) {
+                    contentInput.value = ''; 
+                    loadFeed(); 
+                }
+            } catch (error) { console.error("Error adding comment", error); }
+        }
+
         if (localStorage.getItem('token')) {
             showDashboard();
         }
